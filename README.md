@@ -66,4 +66,4 @@ PRs are welcome. To add a new skill:
 
 ## License
 
-MIT. See `LICENSE`.
+Copyright (c) Ralix Core Team. Ralix is released under the [MIT License](LICENSE).
