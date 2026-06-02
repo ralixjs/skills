@@ -1,9 +1,13 @@
 ---
 name: ralix-rails
-description: Develop frontend code using Ralix microframework in Ruby on Rails projects. Use when creating controllers, components, helpers, templates, or working with Ralix patterns, route-based controllers, component lifecycle, Ralix helpers (find, findAll, findParent, findParents, on, elem, addClass, removeClass, toggleClass, hasClass, attr, data, style, removeAttr, removeData, insertHTML, sanitize, render, insertTemplate, visit, back, reload, currentUrl, getParam, setParam, get, post, ajax, serialize, submit, currentElement, currentEvent), or integrating Ralix with Rails UJS and Turbolinks/Turbo.
+metadata:
+  ralix_version: "1.9.0"
+description: Develop frontend code using Ralix microframework in Ruby on Rails projects. Use when creating controllers, components, helpers, templates, or working with Ralix patterns, route-based controllers, component lifecycle, Ralix helpers (find, findAll, findParent, findParents, on, elem, addClass, removeClass, toggleClass, hasClass, attr, data, style, removeAttr, removeData, insertHTML, sanitize, render, insertTemplate, visit, back, reload, currentUrl, getParam, setParam, get, post, ajax, serialize, submit, currentElement, currentEvent, debounce, throttle, deepMerge, pick, omit, getProperties), or integrating Ralix with Rails UJS and Turbolinks/Turbo.
 ---
 
 # Ralix for Ruby on Rails
+
+> **Aligned with Ralix `v1.9.0`.** When updating this skill, bump `metadata.ralix_version` in the frontmatter and this line, then diff against the previous tag in the [Ralix repo](https://github.com/ralixjs/ralix).
 
 Comprehensive guide for mastering Ralix microframework - a lightweight JavaScript framework that enhances server-rendered Rails frontends with route-based controllers, reusable components, and utility helpers.
 
@@ -370,7 +374,7 @@ export const itemCard = ({ title, description, id }) => `
 ### 2. Using Templates
 
 ```javascript
-// Render template function
+// Render template function — sanitizes the DATA by default (not the template)
 const html = render('flashMessage', {
   type: 'success',
   message: 'Saved successfully',
@@ -378,15 +382,19 @@ const html = render('flashMessage', {
   dissmisable: true
 })
 
+// Opt out of data sanitization when the data is already trusted/controlled
+const html2 = render('flashMessage', data, { sanitize: false })
+
 // Insert rendered HTML manually
 insertHTML('body', html, 'end')
 
 // Or use insertTemplate helper (combines render + insertHTML)
+// 4th arg is an OPTIONS object: { position, sanitize } — NOT a position string
 insertTemplate(
   '.container',
   'itemCard',
   { title: 'Item 1', description: 'Description', id: 1 },
-  'end'  // 'end' or 'start'
+  { position: 'end' }  // position: 'inner' | 'prepend' | 'begin' | 'end' | 'append'
 )
 ```
 
@@ -554,7 +562,7 @@ const url = currentUrl()
 // URL params (get/set without full reload)
 const allParams = getParam()                    // Object with all params
 const singleParam = getParam('id')              // Single param
-const arrayParam = getParam('ids[]')            // Array param (ids[])
+const arrayParam = getParam('ids')              // Array param: reads ids[]=1&ids[]=2 → ['1','2'] (the [] is appended internally)
 
 setParam('page', 2)                             // Set single param
 setParam({ page: 2, sort: 'name' })             // Set multiple
@@ -628,12 +636,69 @@ if (find('.element')) {
 ### 8. Templates
 
 ```javascript
-// Render template (requires App.templates)
+// render(template, data, options = {}) — requires App.templates
+// options.sanitize (default true) sanitizes the DATA passed in, not the template
 const html = render('flashMessage', { type: 'success', message: 'Done' })
+const raw  = render('flashMessage', trustedData, { sanitize: false })
 
-// Insert template (render + insertHTML, sanitize: false)
+// insertTemplate(query, template, data, options = {}) — render + insertHTML
+// options object carries BOTH position and sanitize. Internally it sanitizes the
+// data (per options.sanitize), then inserts the template HTML WITHOUT re-sanitizing
+// it — so onclick/inline handlers in YOUR template survive.
 insertTemplate('.container', 'itemCard', { title: 'Item', id: 1 })
-insertTemplate('.container', 'itemCard', { title: 'Item', id: 1 }, 'end')  // position
+insertTemplate('.container', 'itemCard', { title: 'Item', id: 1 }, { position: 'end' })
+insertTemplate('.container', 'itemCard', trustedData, { sanitize: false })
+```
+
+**Sanitization model (since v1.8.0, parameterizable since v1.8.4):**
+- `render`/`insertTemplate` sanitize the **data** (typically user input), NOT the template literal (your controlled HTML). This is why inline handlers like `onclick` in your templates are preserved — in versions before this they were stripped because the whole output was sanitized.
+- `sanitize` is **recursive** (since v1.8.4): it walks arrays and nested objects in the data.
+- Pass `{ sanitize: false }` only when the data is already trusted/controlled.
+
+### 9. Function Helpers (since v1.9.0)
+
+```javascript
+// Debounce: only fires after `ms` of silence since the last call (default 300)
+// Ideal for search inputs, resize handlers — wait until the burst stops
+const search = debounce((query) => {
+  ajax(`/search?q=${query}`)
+}, 500)
+
+on('#search-input', 'keyup', (e) => {
+  search(e.target.value)
+})
+
+// Throttle: fires immediately, then ignores calls within `ms` (default 300)
+// Ideal for scroll/resize — rate-limit a handler
+const handleScroll = throttle(() => {
+  console.log('Scroll position:', window.scrollY)
+}, 200)
+
+on(window, 'scroll', handleScroll)
+```
+
+### 10. Object Helpers (since v1.9.0)
+
+```javascript
+// deepMerge(target, source): recursive merge, returns a NEW object (no mutation)
+// Nested objects merge; arrays and non-object values in source override target
+const defaults = { ui: { theme: 'light', sidebar: true }, debug: false }
+const userConfig = { ui: { theme: 'dark' }, debug: true }
+deepMerge(defaults, userConfig)
+// { ui: { theme: 'dark', sidebar: true }, debug: true }
+
+// pick(obj, keys): new object with ONLY the given keys (missing keys ignored)
+pick(user, ['name', 'email'])
+// { name: 'Alice', email: 'alice@example.com' }
+
+// omit(obj, keys): new object WITHOUT the given keys (original not mutated)
+omit(user, ['id', 'role'])
+// { name: 'Alice', email: 'alice@example.com' }
+
+// getProperties(obj, { onlyFunctions = false }): Set of prop names from the
+// prototype chain. With onlyFunctions: true, returns only methods.
+getProperties(new MyController(), { onlyFunctions: true })
+// Set { 'index', 'show', 'constructor' }
 ```
 
 ## Integration with Rails
@@ -699,9 +764,13 @@ _getFetchHeaders() {
 }
 
 async _deleteAsset(id) {
+  // method/headers MUST go inside `options` — ajax destructures { params, options }.
+  // Passing them at the top level is silently ignored (request would default to GET).
   const response = await ajax(`/assets/${id}`, {
-    method: 'DELETE',
-    headers: this._getFetchHeaders()
+    options: {
+      method: 'DELETE',
+      headers: this._getFetchHeaders()
+    }
   })
   return response
 }
@@ -797,33 +866,22 @@ export default class AssetSelector {
 
 ### 4. Debouncing and Throttling
 
-```javascript
-// Debounce search input
-constructor() {
-  this.searchField = find('.search-input')
-  this.delay = 300
-  this.timer = null
+Since v1.9.0, prefer the built-in `debounce` and `throttle` helpers over manual `setTimeout`/timestamp bookkeeping:
 
-  on(this.searchField, 'keyup', () => {
-    if (this.timer) clearTimeout(this.timer)
-    this.timer = setTimeout(() => this.search(), this.delay)
-  })
+```javascript
+// Debounce search input — fires after the typing burst stops
+constructor() {
+  this.search = debounce(() => this._runSearch(), 300)
+  on('.search-input', 'keyup', this.search)
 }
 
-// Throttle scroll events
+// Throttle scroll events — rate-limit the handler
 constructor() {
-  this.lastScroll = 0
-  this.throttleDelay = 100
-
-  on(window, 'scroll', () => {
-    const now = Date.now()
-    if (now - this.lastScroll >= this.throttleDelay) {
-      this.handleScroll()
-      this.lastScroll = now
-    }
-  })
+  on(window, 'scroll', throttle(() => this.handleScroll(), 100))
 }
 ```
+
+> Before v1.9.0 you had to roll this by hand with `setTimeout`/`clearTimeout` (debounce) or a `Date.now()` timestamp guard (throttle). The helpers now cover both.
 
 ### 5. Loading States
 
